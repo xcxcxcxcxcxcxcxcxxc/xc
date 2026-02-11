@@ -826,7 +826,7 @@ local WatermarkConnection = RunService.Heartbeat:Connect(function()
         FrameTimer = tick()
         FrameCounter = 0
         
-        Library:SetWatermark(('XC Script Hub | %s fps | %s ms'):format(
+        Library:SetWatermark(('claude code | %s fps | %s ms'):format(
             math.floor(FPS),
             math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
         ))
