@@ -18,7 +18,7 @@ local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 
 local Window = Library:CreateWindow({
-    Title = 'XC Script Hub',
+    Title = 'claude code baby',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -27,6 +27,7 @@ local Window = Library:CreateWindow({
 
 local Tabs = {
     Main = Window:AddTab('Main'),
+    Settings = Window:AddTab('Settings'),
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
 
@@ -53,7 +54,7 @@ local function updateAutoCollect()
     
     -- Only create connection if at least one is enabled
     if collectHealth or collectAmmo then
-        collectConnection = RunService.RenderStepped:Connect(function()
+        collectConnection = RunService.Heartbeat:Connect(function()
             local character = Players.LocalPlayer.Character
             if not character then return end
             local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -61,7 +62,10 @@ local function updateAutoCollect()
             local humanoid = character:FindFirstChild("Humanoid")
             local needsHealth = humanoid and humanoid.Health < humanoid.MaxHealth
             
-            for _, obj in workspace:GetChildren() do
+            -- Cache workspace children to avoid repeated calls
+            local workspaceChildren = workspace:GetChildren()
+            for i = 1, #workspaceChildren do
+                local obj = workspaceChildren[i]
                 if obj.Name == "_drop" and obj:IsA("BasePart") then
                     if (collectHealth and obj:FindFirstChild("Health") and needsHealth) or 
                        (collectAmmo and obj:FindFirstChild("Ammo")) then
@@ -124,246 +128,6 @@ AutoCollectBox:AddDivider()
 AutoCollectBox:AddLabel('Note: Both can be enabled at once!')
 
 -- ============================================
--- CHARM CHANGER SECTION
--- ============================================
-local CharmBox = Tabs.Main:AddLeftGroupbox('Charm Changer')
-
--- List of all available charms
-local charmList = {
-    "Unranked",
-    "Bronze 1", "Bronze 2", "Bronze 3",
-    "Silver 1", "Silver 2", "Silver 3",
-    "Gold 1", "Gold 2", "Gold 3",
-    "Platinum 1", "Platinum 2", "Platinum 3",
-    "Diamond 1", "Diamond 2", "Diamond 3",
-    "Onyx 1", "Onyx 2", "Onyx 3",
-    "Nemesis", "Archnemesis"
-}
-
--- Current selected charms
-local season0Charm = "Unranked"
-local season1Charm = "Unranked"
-
--- Charm script functions
-local function completelyHide(model)
-    for _, child in pairs(model:GetDescendants()) do
-        if child:IsA("BasePart") then
-            child.Transparency = 1
-            child.CanCollide = false
-            child.Size = Vector3.new(0, 0, 0)
-        end
-        if child:IsA("Decal") or child:IsA("Texture") then
-            child.Transparency = 1
-        end
-        if child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
-            child.Enabled = false
-        end
-        if child:IsA("ParticleEmitter") or child:IsA("Beam") then
-            child.Enabled = false
-        end
-    end
-    
-    if model:IsA("BasePart") then
-        model.Transparency = 1
-        model.CanCollide = false
-        model.Size = Vector3.new(0, 0, 0)
-    end
-end
-
-local function makeVisible(model)
-    for _, child in pairs(model:GetDescendants()) do
-        if child:IsA("BasePart") then
-            child.Transparency = 0
-        end
-        if child:IsA("Decal") or child:IsA("Texture") then
-            child.Transparency = 0
-        end
-        if child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
-            child.Enabled = true
-        end
-        if child:IsA("ParticleEmitter") or child:IsA("Beam") then
-            child.Enabled = true
-        end
-    end
-end
-
-local function findRankInExtra(seasonFolder, rankName)
-    if seasonFolder.Extra and seasonFolder.Extra:FindFirstChild(rankName) then
-        return seasonFolder.Extra:FindFirstChild(rankName)
-    end
-    return nil
-end
-
-local function applyRank(seasonFolder, rankName, seasonNumber)
-    -- Force hide problematic parts
-    if seasonFolder:FindFirstChild("Rank") then
-        completelyHide(seasonFolder.Rank)
-        seasonFolder.Rank:Destroy()
-    end
-    
-    if seasonFolder:FindFirstChild("Primary") then
-        completelyHide(seasonFolder.Primary)
-    end
-    
-    if seasonFolder.Extra and seasonFolder.Extra:FindFirstChild("Unranked") then
-        completelyHide(seasonFolder.Extra.Unranked)
-    end
-    
-    -- Check for Rank in all descendants
-    for _, child in pairs(seasonFolder:GetDescendants()) do
-        if child.Name == "Rank" and child ~= seasonFolder:FindFirstChild("Rank") then
-            completelyHide(child)
-            child:Destroy()
-        end
-    end
-    
-    -- Keep Hook visible
-    if seasonFolder:FindFirstChild("Hook") then
-        makeVisible(seasonFolder.Hook)
-    end
-    
-    -- Remove old clones
-    for _, child in pairs(seasonFolder:GetChildren()) do
-        if child.Name:find("_Active") then
-            child:Destroy()
-        end
-    end
-    
-    -- Hide all default charms except Hook
-    for _, child in pairs(seasonFolder:GetChildren()) do
-        if child.Name ~= "Extra" and child.Name ~= "Hook" then
-            completelyHide(child)
-        end
-    end
-    
-    -- Hide Unranked in Extra
-    if seasonFolder.Extra and seasonFolder.Extra:FindFirstChild("Unranked") then
-        completelyHide(seasonFolder.Extra.Unranked)
-    end
-    
-    -- Find and clone desired rank
-    local desiredRank = findRankInExtra(seasonFolder, rankName)
-    
-    if desiredRank then
-        local rankClone = desiredRank:Clone()
-        rankClone.Name = rankName .. "_Active"
-        rankClone.Parent = seasonFolder
-        makeVisible(rankClone)
-        print("[Charm Mod] Applied " .. rankName .. " to Season " .. seasonNumber)
-    else
-        warn("[Charm Mod] Rank not found: " .. rankName)
-    end
-end
-
-local function unlockSeason(seasonFolder)
-    for _, child in pairs(seasonFolder:GetDescendants()) do
-        if child:IsA("BoolValue") then
-            if child.Name:lower():find("lock") and not child.Name:lower():find("unlock") then
-                child.Value = false
-            elseif child.Name:lower():find("unlock") then
-                child.Value = true
-            end
-        end
-        if child:IsA("IntValue") then
-            if child.Name:lower():find("lock") then
-                child.Value = 0
-            elseif child.Name:lower():find("unlock") then
-                child.Value = 1
-            end
-        end
-    end
-end
-
-local function applySeason0Charm()
-    pcall(function()
-        local season0 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 0"]
-        unlockSeason(season0)
-        applyRank(season0, season0Charm, 0)
-    end)
-end
-
-local function applySeason1Charm()
-    pcall(function()
-        local season1 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 1"]
-        unlockSeason(season1)
-        applyRank(season1, season1Charm, 1)
-    end)
-end
-
--- Season 0 Dropdown
-CharmBox:AddLabel('Season 0 Charms:')
-CharmBox:AddDropdown('Season0Charm', {
-    Values = charmList,
-    Default = 1, -- Unranked
-    Multi = false,
-    Text = 'Season 0 Rank',
-    Tooltip = 'Select your Season 0 charm',
-    Callback = function(Value)
-        season0Charm = Value
-        applySeason0Charm()
-    end
-})
-
-CharmBox:AddDivider()
-
--- Season 1 Dropdown
-CharmBox:AddLabel('Season 1 Charms:')
-CharmBox:AddDropdown('Season1Charm', {
-    Values = charmList,
-    Default = 1, -- Unranked
-    Multi = false,
-    Text = 'Season 1 Rank',
-    Tooltip = 'Select your Season 1 charm',
-    Callback = function(Value)
-        season1Charm = Value
-        applySeason1Charm()
-    end
-})
-
-CharmBox:AddDivider()
-
-CharmBox:AddButton({
-    Text = 'Apply All Charms',
-    Func = function()
-        applySeason0Charm()
-        task.wait(0.1)
-        applySeason1Charm()
-        print('[Charm Mod] All charms applied!')
-    end,
-    Tooltip = 'Manually reapply both charms'
-})
-
-CharmBox:AddLabel('Note: Changes are client-side\nonly (only you see them)', true)
-
--- Auto-reapply on character spawn
-Players.LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(2)
-    applySeason0Charm()
-    task.wait(0.1)
-    applySeason1Charm()
-    print('[Charm Mod] Charms reapplied after spawn')
-end)
-
--- Monitor for Rank cubes reappearing
-task.spawn(function()
-    while task.wait(10) do
-        pcall(function()
-            local season0 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 0"]
-            if season0:FindFirstChild("Rank") then
-                season0.Rank:Destroy()
-            end
-        end)
-        
-        pcall(function()
-            local season1 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 1"]
-            if season1:FindFirstChild("Rank") then
-                season1.Rank:Destroy()
-            end
-        end)
-    end
-end)
-
--- ============================================
 -- AIMBOT SECTION
 -- ============================================
 local AimbotBox = Tabs.Main:AddLeftGroupbox('Aimbot')
@@ -372,6 +136,7 @@ local AimbotBox = Tabs.Main:AddLeftGroupbox('Aimbot')
 local aimbotEnabled = false
 local aimbotSmoothness = 50
 local aimbotConnection = nil
+local aimbotTarget = "Head" -- Head or HumanoidRootPart
 local UserInputService = game:GetService("UserInputService")
 
 -- Function to get the closest player
@@ -385,10 +150,10 @@ local function getClosestPlayer()
         if player ~= localPlayer and player.Character then
             local character = player.Character
             local humanoid = character:FindFirstChild("Humanoid")
-            local head = character:FindFirstChild("Head")
+            local targetPart = character:FindFirstChild(aimbotTarget)
             
-            if humanoid and humanoid.Health > 0 and head then
-                local screenPoint, onScreen = camera:WorldToViewportPoint(head.Position)
+            if humanoid and humanoid.Health > 0 and targetPart then
+                local screenPoint, onScreen = camera:WorldToViewportPoint(targetPart.Position)
                 
                 if onScreen then
                     local mouseLocation = UserInputService:GetMouseLocation()
@@ -413,11 +178,11 @@ local function aimAtTarget()
     local target = getClosestPlayer()
     if not target or not target.Character then return end
     
-    local targetHead = target.Character:FindFirstChild("Head")
-    if not targetHead then return end
+    local targetPart = target.Character:FindFirstChild(aimbotTarget)
+    if not targetPart then return end
     
     local camera = workspace.CurrentCamera
-    local targetPosition = targetHead.Position
+    local targetPosition = targetPart.Position
     
     -- Calculate smoothness (inverse relationship - lower smoothness = faster aim)
     local smoothFactor = (101 - aimbotSmoothness) / 100
@@ -482,7 +247,397 @@ AimbotBox:AddSlider('AimbotSmoothness', {
 })
 
 AimbotBox:AddDivider()
+
+AimbotBox:AddDropdown('AimbotTarget', {
+    Values = { 'Head', 'HumanoidRootPart' },
+    Default = 1, -- Head
+    Multi = false,
+    Text = 'Target Part',
+    Tooltip = 'Choose where to aim (Head or Torso)',
+    Callback = function(Value)
+        aimbotTarget = Value
+    end
+})
+
+AimbotBox:AddDivider()
 AimbotBox:AddLabel('Hold keybind to aim at\nclosest enemy to crosshair', true)
+
+-- ============================================
+-- ESP SECTION
+-- ============================================
+local ESPBox = Tabs.Main:AddRightGroupbox('ESP')
+
+-- ESP variables
+local espEnabled = false
+local showBoxes = true
+local showNames = true
+local showHealth = true
+local showDistance = true
+local showTracers = false
+local espColor = Color3.fromRGB(255, 0, 0)
+local espConnections = {}
+local espObjects = {}
+local espUpdateRate = 2 -- Update every N frames for performance
+
+-- Function to create ESP for a player
+local function createESP(player)
+    if player == Players.LocalPlayer then return end
+    
+    local espFolder = Instance.new("Folder")
+    espFolder.Name = "ESP_" .. player.Name
+    espFolder.Parent = game.CoreGui
+    
+    espObjects[player] = espFolder
+    
+    -- Box ESP
+    local boxESP = Drawing.new("Square")
+    boxESP.Visible = false
+    boxESP.Color = espColor
+    boxESP.Thickness = 2
+    boxESP.Transparency = 1
+    boxESP.Filled = false
+    
+    -- Name ESP
+    local nameESP = Drawing.new("Text")
+    nameESP.Visible = false
+    nameESP.Color = espColor
+    nameESP.Size = 18
+    nameESP.Center = true
+    nameESP.Outline = true
+    nameESP.Font = 2
+    nameESP.Text = player.Name
+    
+    -- Health ESP
+    local healthESP = Drawing.new("Text")
+    healthESP.Visible = false
+    healthESP.Color = Color3.fromRGB(0, 255, 0)
+    healthESP.Size = 16
+    healthESP.Center = true
+    healthESP.Outline = true
+    healthESP.Font = 2
+    
+    -- Distance ESP
+    local distanceESP = Drawing.new("Text")
+    distanceESP.Visible = false
+    distanceESP.Color = Color3.fromRGB(255, 255, 255)
+    distanceESP.Size = 14
+    distanceESP.Center = true
+    distanceESP.Outline = true
+    distanceESP.Font = 2
+    
+    -- Tracer ESP
+    local tracerESP = Drawing.new("Line")
+    tracerESP.Visible = false
+    tracerESP.Color = espColor
+    tracerESP.Thickness = 1
+    tracerESP.Transparency = 1
+    
+    -- Health Bar
+    local healthBarOutline = Drawing.new("Square")
+    healthBarOutline.Visible = false
+    healthBarOutline.Color = Color3.fromRGB(0, 0, 0)
+    healthBarOutline.Thickness = 1
+    healthBarOutline.Transparency = 1
+    healthBarOutline.Filled = false
+    
+    local healthBarFill = Drawing.new("Square")
+    healthBarFill.Visible = false
+    healthBarFill.Color = Color3.fromRGB(0, 255, 0)
+    healthBarFill.Thickness = 1
+    healthBarFill.Transparency = 0.5
+    healthBarFill.Filled = true
+    
+    local frameCount = 0
+    
+    local function updateESP()
+        frameCount = frameCount + 1
+        if frameCount % espUpdateRate ~= 0 then return end
+        
+        if not espEnabled then
+            boxESP.Visible = false
+            nameESP.Visible = false
+            healthESP.Visible = false
+            distanceESP.Visible = false
+            tracerESP.Visible = false
+            healthBarOutline.Visible = false
+            healthBarFill.Visible = false
+            return
+        end
+        
+        local character = player.Character
+        if not character then
+            boxESP.Visible = false
+            nameESP.Visible = false
+            healthESP.Visible = false
+            distanceESP.Visible = false
+            tracerESP.Visible = false
+            healthBarOutline.Visible = false
+            healthBarFill.Visible = false
+            return
+        end
+        
+        local humanoid = character:FindFirstChild("Humanoid")
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        
+        if not rootPart or not humanoid or humanoid.Health <= 0 then
+            boxESP.Visible = false
+            nameESP.Visible = false
+            healthESP.Visible = false
+            distanceESP.Visible = false
+            tracerESP.Visible = false
+            healthBarOutline.Visible = false
+            healthBarFill.Visible = false
+            return
+        end
+        
+        local camera = workspace.CurrentCamera
+        local vector, onScreen = camera:WorldToViewportPoint(rootPart.Position)
+        
+        if onScreen then
+            local head = character:FindFirstChild("Head")
+            local headPos = head and head.Position or rootPart.Position + Vector3.new(0, 2, 0)
+            local legPos = rootPart.Position - Vector3.new(0, 3, 0)
+            
+            local topVector = camera:WorldToViewportPoint(headPos)
+            local bottomVector = camera:WorldToViewportPoint(legPos)
+            
+            local height = math.abs(topVector.Y - bottomVector.Y)
+            local width = height / 2
+            
+            -- Update Box ESP
+            if showBoxes then
+                boxESP.Size = Vector2.new(width, height)
+                boxESP.Position = Vector2.new(vector.X - width / 2, vector.Y - height / 2)
+                boxESP.Color = espColor
+                boxESP.Visible = true
+            else
+                boxESP.Visible = false
+            end
+            
+            -- Update Name ESP
+            if showNames then
+                nameESP.Position = Vector2.new(vector.X, topVector.Y - 20)
+                nameESP.Color = espColor
+                nameESP.Text = player.Name
+                nameESP.Visible = true
+            else
+                nameESP.Visible = false
+            end
+            
+            -- Calculate distance
+            local distance = (Players.LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
+            
+            -- Update Health ESP
+            if showHealth then
+                local healthPercent = math.floor((humanoid.Health / humanoid.MaxHealth) * 100)
+                healthESP.Position = Vector2.new(vector.X, bottomVector.Y + 5)
+                healthESP.Text = healthPercent .. "%"
+                
+                -- Color based on health
+                if healthPercent > 75 then
+                    healthESP.Color = Color3.fromRGB(0, 255, 0)
+                elseif healthPercent > 50 then
+                    healthESP.Color = Color3.fromRGB(255, 255, 0)
+                elseif healthPercent > 25 then
+                    healthESP.Color = Color3.fromRGB(255, 165, 0)
+                else
+                    healthESP.Color = Color3.fromRGB(255, 0, 0)
+                end
+                healthESP.Visible = true
+                
+                -- Health bar
+                healthBarOutline.Size = Vector2.new(4, height)
+                healthBarOutline.Position = Vector2.new(vector.X - width / 2 - 6, vector.Y - height / 2)
+                healthBarOutline.Visible = true
+                
+                local healthHeight = height * (humanoid.Health / humanoid.MaxHealth)
+                healthBarFill.Size = Vector2.new(2, healthHeight)
+                healthBarFill.Position = Vector2.new(vector.X - width / 2 - 5, vector.Y + height / 2 - healthHeight)
+                healthBarFill.Color = healthESP.Color
+                healthBarFill.Visible = true
+            else
+                healthESP.Visible = false
+                healthBarOutline.Visible = false
+                healthBarFill.Visible = false
+            end
+            
+            -- Update Distance ESP
+            if showDistance then
+                distanceESP.Position = Vector2.new(vector.X, bottomVector.Y + 20)
+                distanceESP.Text = math.floor(distance) .. " studs"
+                distanceESP.Visible = true
+            else
+                distanceESP.Visible = false
+            end
+            
+            -- Update Tracer ESP
+            if showTracers then
+                local screenSize = camera.ViewportSize
+                tracerESP.From = Vector2.new(screenSize.X / 2, screenSize.Y)
+                tracerESP.To = Vector2.new(vector.X, vector.Y)
+                tracerESP.Color = espColor
+                tracerESP.Visible = true
+            else
+                tracerESP.Visible = false
+            end
+        else
+            boxESP.Visible = false
+            nameESP.Visible = false
+            healthESP.Visible = false
+            distanceESP.Visible = false
+            tracerESP.Visible = false
+            healthBarOutline.Visible = false
+            healthBarFill.Visible = false
+        end
+    end
+    
+    local connection = RunService.Heartbeat:Connect(updateESP)
+    espConnections[player] = {
+        connection = connection,
+        drawings = {boxESP, nameESP, healthESP, distanceESP, tracerESP, healthBarOutline, healthBarFill}
+    }
+end
+
+-- Function to remove ESP for a player
+local function removeESP(player)
+    if espConnections[player] then
+        espConnections[player].connection:Disconnect()
+        for _, drawing in pairs(espConnections[player].drawings) do
+            drawing:Remove()
+        end
+        espConnections[player] = nil
+    end
+    
+    if espObjects[player] then
+        espObjects[player]:Destroy()
+        espObjects[player] = nil
+    end
+end
+
+-- Function to update all ESP
+local function updateAllESP()
+    for player, _ in pairs(espConnections) do
+        if not player or not player.Parent then
+            removeESP(player)
+        end
+    end
+end
+
+-- Initialize ESP for existing players
+local function initializeESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Players.LocalPlayer then
+            createESP(player)
+        end
+    end
+end
+
+-- ESP Toggles and Settings
+ESPBox:AddToggle('ESPEnabled', {
+    Text = 'Enable ESP',
+    Default = false,
+    Tooltip = 'Toggle ESP on/off',
+    Callback = function(Value)
+        espEnabled = Value
+        if espEnabled then
+            initializeESP()
+        else
+            for player, _ in pairs(espConnections) do
+                removeESP(player)
+            end
+        end
+    end
+})
+
+ESPBox:AddLabel('Keybind'):AddKeyPicker('ESPKeybind', {
+    Default = 'None',
+    SyncToggleState = true,
+    Mode = 'Toggle',
+    Text = 'ESP keybind',
+    NoUI = false,
+    Callback = function(Value)
+        espEnabled = Value
+        if espEnabled then
+            initializeESP()
+        else
+            for player, _ in pairs(espConnections) do
+                removeESP(player)
+            end
+        end
+    end
+})
+
+ESPBox:AddDivider()
+
+ESPBox:AddToggle('ShowBoxes', {
+    Text = 'Show Boxes',
+    Default = true,
+    Tooltip = 'Show box around players',
+    Callback = function(Value)
+        showBoxes = Value
+    end
+})
+
+ESPBox:AddToggle('ShowNames', {
+    Text = 'Show Names',
+    Default = true,
+    Tooltip = 'Show player names',
+    Callback = function(Value)
+        showNames = Value
+    end
+})
+
+ESPBox:AddToggle('ShowHealth', {
+    Text = 'Show Health',
+    Default = true,
+    Tooltip = 'Show player health percentage and bar',
+    Callback = function(Value)
+        showHealth = Value
+    end
+})
+
+ESPBox:AddToggle('ShowDistance', {
+    Text = 'Show Distance',
+    Default = true,
+    Tooltip = 'Show distance to players',
+    Callback = function(Value)
+        showDistance = Value
+    end
+})
+
+ESPBox:AddToggle('ShowTracers', {
+    Text = 'Show Tracers',
+    Default = false,
+    Tooltip = 'Show lines to players',
+    Callback = function(Value)
+        showTracers = Value
+    end
+})
+
+ESPBox:AddDivider()
+
+ESPBox:AddLabel('ESP Color'):AddColorPicker('ESPColor', {
+    Default = Color3.fromRGB(255, 0, 0),
+    Title = 'ESP Color',
+    Callback = function(Value)
+        espColor = Value
+    end
+})
+
+ESPBox:AddDivider()
+ESPBox:AddLabel('ESP shows through walls\nand updates in real-time', true)
+
+-- Player events
+Players.PlayerAdded:Connect(function(player)
+    if espEnabled and player ~= Players.LocalPlayer then
+        task.wait(1)
+        createESP(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
+end)
 
 -- ============================================
 -- VOID SPAM TELEPORT SECTION
@@ -627,25 +782,29 @@ end)
 -- LIBRARY SETTINGS
 -- ============================================
 
-Library:SetWatermarkVisibility(true)
+local showWatermark = true
+
+Library:SetWatermarkVisibility(showWatermark)
 
 local FrameTimer = tick()
 local FrameCounter = 0
 local FPS = 60
 
-local WatermarkConnection = RunService.RenderStepped:Connect(function()
-    FrameCounter += 1
+local WatermarkConnection = RunService.Heartbeat:Connect(function()
+    if not showWatermark then return end
+    
+    FrameCounter = FrameCounter + 1
     
     if (tick() - FrameTimer) >= 1 then
         FPS = FrameCounter
         FrameTimer = tick()
         FrameCounter = 0
+        
+        Library:SetWatermark(('XC Script Hub | %s fps | %s ms'):format(
+            math.floor(FPS),
+            math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
+        ))
     end
-    
-    Library:SetWatermark(('XC Script Hub | %s fps | %s ms'):format(
-        math.floor(FPS),
-        math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
-    ))
 end)
 
 Library.KeybindFrame.Visible = true
@@ -663,6 +822,11 @@ Library:OnUnload(function()
         aimbotConnection:Disconnect()
     end
     
+    -- Clean up ESP
+    for player, _ in pairs(espConnections) do
+        removeESP(player)
+    end
+    
     -- Clean up teleport
     if isTeleporting then
         toggleTeleportMode(false)
@@ -671,6 +835,47 @@ Library:OnUnload(function()
     print('Unloaded!')
     Library.Unloaded = true
 end)
+
+-- ============================================
+-- SETTINGS TAB
+-- ============================================
+local SettingsGroup = Tabs.Settings:AddLeftGroupbox('Performance & Display')
+
+SettingsGroup:AddToggle('ShowWatermark', {
+    Text = 'Show FPS/Ping Watermark',
+    Default = true,
+    Tooltip = 'Toggle FPS and ping display',
+    Callback = function(Value)
+        showWatermark = Value
+        Library:SetWatermarkVisibility(Value)
+    end
+})
+
+SettingsGroup:AddDivider()
+
+SettingsGroup:AddSlider('ESPUpdateRate', {
+    Text = 'ESP Update Rate',
+    Default = 2,
+    Min = 1,
+    Max = 5,
+    Rounding = 0,
+    Tooltip = 'Higher = Better performance, Lower = Smoother ESP (1-5 frames)',
+    Callback = function(Value)
+        espUpdateRate = Value
+    end
+})
+
+SettingsGroup:AddDivider()
+
+SettingsGroup:AddLabel('Keybind Modes Info:', true)
+SettingsGroup:AddLabel('Toggle: Press once to turn on/off\nHold: Only active while holding\nAlways: Always active', true)
+
+local KeybindInfoGroup = Tabs.Settings:AddRightGroupbox('Keybind Info')
+KeybindInfoGroup:AddLabel('Right-click any keybind to\nchange its mode:', true)
+KeybindInfoGroup:AddDivider()
+KeybindInfoGroup:AddLabel('• Toggle - Press to turn on/off')
+KeybindInfoGroup:AddLabel('• Hold - Only active while held')
+KeybindInfoGroup:AddLabel('• Always - Always active')
 
 -- ============================================
 -- UI SETTINGS TAB
