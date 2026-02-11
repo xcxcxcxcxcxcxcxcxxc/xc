@@ -124,6 +124,246 @@ AutoCollectBox:AddDivider()
 AutoCollectBox:AddLabel('Note: Both can be enabled at once!')
 
 -- ============================================
+-- CHARM CHANGER SECTION
+-- ============================================
+local CharmBox = Tabs.Main:AddLeftGroupbox('Charm Changer')
+
+-- List of all available charms
+local charmList = {
+    "Unranked",
+    "Bronze 1", "Bronze 2", "Bronze 3",
+    "Silver 1", "Silver 2", "Silver 3",
+    "Gold 1", "Gold 2", "Gold 3",
+    "Platinum 1", "Platinum 2", "Platinum 3",
+    "Diamond 1", "Diamond 2", "Diamond 3",
+    "Onyx 1", "Onyx 2", "Onyx 3",
+    "Nemesis", "Archnemesis"
+}
+
+-- Current selected charms
+local season0Charm = "Unranked"
+local season1Charm = "Unranked"
+
+-- Charm script functions
+local function completelyHide(model)
+    for _, child in pairs(model:GetDescendants()) do
+        if child:IsA("BasePart") then
+            child.Transparency = 1
+            child.CanCollide = false
+            child.Size = Vector3.new(0, 0, 0)
+        end
+        if child:IsA("Decal") or child:IsA("Texture") then
+            child.Transparency = 1
+        end
+        if child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
+            child.Enabled = false
+        end
+        if child:IsA("ParticleEmitter") or child:IsA("Beam") then
+            child.Enabled = false
+        end
+    end
+    
+    if model:IsA("BasePart") then
+        model.Transparency = 1
+        model.CanCollide = false
+        model.Size = Vector3.new(0, 0, 0)
+    end
+end
+
+local function makeVisible(model)
+    for _, child in pairs(model:GetDescendants()) do
+        if child:IsA("BasePart") then
+            child.Transparency = 0
+        end
+        if child:IsA("Decal") or child:IsA("Texture") then
+            child.Transparency = 0
+        end
+        if child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
+            child.Enabled = true
+        end
+        if child:IsA("ParticleEmitter") or child:IsA("Beam") then
+            child.Enabled = true
+        end
+    end
+end
+
+local function findRankInExtra(seasonFolder, rankName)
+    if seasonFolder.Extra and seasonFolder.Extra:FindFirstChild(rankName) then
+        return seasonFolder.Extra:FindFirstChild(rankName)
+    end
+    return nil
+end
+
+local function applyRank(seasonFolder, rankName, seasonNumber)
+    -- Force hide problematic parts
+    if seasonFolder:FindFirstChild("Rank") then
+        completelyHide(seasonFolder.Rank)
+        seasonFolder.Rank:Destroy()
+    end
+    
+    if seasonFolder:FindFirstChild("Primary") then
+        completelyHide(seasonFolder.Primary)
+    end
+    
+    if seasonFolder.Extra and seasonFolder.Extra:FindFirstChild("Unranked") then
+        completelyHide(seasonFolder.Extra.Unranked)
+    end
+    
+    -- Check for Rank in all descendants
+    for _, child in pairs(seasonFolder:GetDescendants()) do
+        if child.Name == "Rank" and child ~= seasonFolder:FindFirstChild("Rank") then
+            completelyHide(child)
+            child:Destroy()
+        end
+    end
+    
+    -- Keep Hook visible
+    if seasonFolder:FindFirstChild("Hook") then
+        makeVisible(seasonFolder.Hook)
+    end
+    
+    -- Remove old clones
+    for _, child in pairs(seasonFolder:GetChildren()) do
+        if child.Name:find("_Active") then
+            child:Destroy()
+        end
+    end
+    
+    -- Hide all default charms except Hook
+    for _, child in pairs(seasonFolder:GetChildren()) do
+        if child.Name ~= "Extra" and child.Name ~= "Hook" then
+            completelyHide(child)
+        end
+    end
+    
+    -- Hide Unranked in Extra
+    if seasonFolder.Extra and seasonFolder.Extra:FindFirstChild("Unranked") then
+        completelyHide(seasonFolder.Extra.Unranked)
+    end
+    
+    -- Find and clone desired rank
+    local desiredRank = findRankInExtra(seasonFolder, rankName)
+    
+    if desiredRank then
+        local rankClone = desiredRank:Clone()
+        rankClone.Name = rankName .. "_Active"
+        rankClone.Parent = seasonFolder
+        makeVisible(rankClone)
+        print("[Charm Mod] Applied " .. rankName .. " to Season " .. seasonNumber)
+    else
+        warn("[Charm Mod] Rank not found: " .. rankName)
+    end
+end
+
+local function unlockSeason(seasonFolder)
+    for _, child in pairs(seasonFolder:GetDescendants()) do
+        if child:IsA("BoolValue") then
+            if child.Name:lower():find("lock") and not child.Name:lower():find("unlock") then
+                child.Value = false
+            elseif child.Name:lower():find("unlock") then
+                child.Value = true
+            end
+        end
+        if child:IsA("IntValue") then
+            if child.Name:lower():find("lock") then
+                child.Value = 0
+            elseif child.Name:lower():find("unlock") then
+                child.Value = 1
+            end
+        end
+    end
+end
+
+local function applySeason0Charm()
+    pcall(function()
+        local season0 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 0"]
+        unlockSeason(season0)
+        applyRank(season0, season0Charm, 0)
+    end)
+end
+
+local function applySeason1Charm()
+    pcall(function()
+        local season1 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 1"]
+        unlockSeason(season1)
+        applyRank(season1, season1Charm, 1)
+    end)
+end
+
+-- Season 0 Dropdown
+CharmBox:AddLabel('Season 0 Charms:')
+CharmBox:AddDropdown('Season0Charm', {
+    Values = charmList,
+    Default = 1, -- Unranked
+    Multi = false,
+    Text = 'Season 0 Rank',
+    Tooltip = 'Select your Season 0 charm',
+    Callback = function(Value)
+        season0Charm = Value
+        applySeason0Charm()
+    end
+})
+
+CharmBox:AddDivider()
+
+-- Season 1 Dropdown
+CharmBox:AddLabel('Season 1 Charms:')
+CharmBox:AddDropdown('Season1Charm', {
+    Values = charmList,
+    Default = 1, -- Unranked
+    Multi = false,
+    Text = 'Season 1 Rank',
+    Tooltip = 'Select your Season 1 charm',
+    Callback = function(Value)
+        season1Charm = Value
+        applySeason1Charm()
+    end
+})
+
+CharmBox:AddDivider()
+
+CharmBox:AddButton({
+    Text = 'Apply All Charms',
+    Func = function()
+        applySeason0Charm()
+        task.wait(0.1)
+        applySeason1Charm()
+        print('[Charm Mod] All charms applied!')
+    end,
+    Tooltip = 'Manually reapply both charms'
+})
+
+CharmBox:AddLabel('Note: Changes are client-side\nonly (only you see them)', true)
+
+-- Auto-reapply on character spawn
+Players.LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(2)
+    applySeason0Charm()
+    task.wait(0.1)
+    applySeason1Charm()
+    print('[Charm Mod] Charms reapplied after spawn')
+end)
+
+-- Monitor for Rank cubes reappearing
+task.spawn(function()
+    while task.wait(10) do
+        pcall(function()
+            local season0 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 0"]
+            if season0:FindFirstChild("Rank") then
+                season0.Rank:Destroy()
+            end
+        end)
+        
+        pcall(function()
+            local season1 = Players.LocalPlayer.PlayerScripts.Assets.Charms["Season 1"]
+            if season1:FindFirstChild("Rank") then
+                season1.Rank:Destroy()
+            end
+        end)
+    end
+end)
+
+-- ============================================
 -- AIMBOT SECTION
 -- ============================================
 local AimbotBox = Tabs.Main:AddLeftGroupbox('Aimbot')
