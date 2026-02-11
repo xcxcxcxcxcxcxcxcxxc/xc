@@ -1,7 +1,4 @@
--- LinoriaLib UI Integration Script
--- Combines auto-collect ammo/health and void spam teleport features
-
--- Bypass AC (runs first)
+-- bypasses ac (very simple script)
 pcall(function()
     local replicatedFirst = game:GetService("ReplicatedFirst")
     for _, child in pairs(replicatedFirst:GetChildren()) do
@@ -11,167 +8,117 @@ pcall(function()
     if analytics then analytics:Destroy() end
 end)
 
+-- Roblox Script with LinoriaLib UI
+-- Features: Aimbot, ESP, Triggerbot, FOV Circle
+
 local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 
 local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
 local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 
-local Window = Library:CreateWindow({
-    Title = 'claude code ',
-    Center = true,
-    AutoShow = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2
-})
-
-local Tabs = {
-    Main = Window:AddTab('Main'),
-    Settings = Window:AddTab('Settings'),
-    ['UI Settings'] = Window:AddTab('UI Settings'),
-}
-
--- ============================================
--- AUTO COLLECT SECTION
--- ============================================
-local AutoCollectBox = Tabs.Main:AddLeftGroupbox('Auto Collect')
-
--- Variables for auto collect
-local collectHealth = false
-local collectAmmo = false
-local collectConnection = nil
-
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
 
--- Function to start/stop auto collect
-local function updateAutoCollect()
-    -- Disconnect existing connection if any
-    if collectConnection then
-        collectConnection:Disconnect()
-        collectConnection = nil
-    end
-    
-    -- Only create connection if at least one is enabled
-    if collectHealth or collectAmmo then
-        collectConnection = RunService.Heartbeat:Connect(function()
-            local character = Players.LocalPlayer.Character
-            if not character then return end
-            local hrp = character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local humanoid = character:FindFirstChild("Humanoid")
-            local needsHealth = humanoid and humanoid.Health < humanoid.MaxHealth
-            
-            -- Cache workspace children to avoid repeated calls
-            local workspaceChildren = workspace:GetChildren()
-            for i = 1, #workspaceChildren do
-                local obj = workspaceChildren[i]
-                if obj.Name == "_drop" and obj:IsA("BasePart") then
-                    if (collectHealth and obj:FindFirstChild("Health") and needsHealth) or 
-                       (collectAmmo and obj:FindFirstChild("Ammo")) then
-                        firetouchinterest(hrp, obj, 0)
-                        firetouchinterest(hrp, obj, 1)
-                    end
-                end
-            end
-        end)
-    end
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Settings
+local Settings = {
+    Aimbot = {
+        Enabled = false,
+        TeamCheck = true,
+        VisibleCheck = true,
+        TargetPart = "Head",
+        Smoothness = 1,
+        FOV = 100,
+        ShowFOV = true,
+        Keybind = Enum.KeyCode.E
+    },
+    ESP = {
+        Enabled = false,
+        TeamCheck = true,
+        ShowNames = true,
+        ShowBoxes = true,
+        ShowHealth = true,
+        ShowDistance = true,
+        TextSize = 14,
+        BoxColor = Color3.fromRGB(255, 255, 255),
+        NameColor = Color3.fromRGB(255, 255, 255),
+        HealthColor = Color3.fromRGB(0, 255, 0)
+    },
+    Triggerbot = {
+        Enabled = false,
+        Delay = 0.1,
+        TeamCheck = true
+    }
+}
+
+-- FOV Circle
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 2
+FOVCircle.NumSides = 50
+FOVCircle.Radius = Settings.Aimbot.FOV
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Visible = Settings.Aimbot.ShowFOV
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+
+-- ESP Storage
+local ESPObjects = {}
+
+-- Utility Functions
+local function IsTeamMate(player)
+    if not Settings.Aimbot.TeamCheck and not Settings.ESP.TeamCheck then return false end
+    return player.Team == LocalPlayer.Team
 end
 
-AutoCollectBox:AddToggle('CollectHealth', {
-    Text = 'Auto Collect Health',
-    Default = false,
-    Tooltip = 'Automatically collect health drops',
-    Callback = function(Value)
-        collectHealth = Value
-        updateAutoCollect()
+local function IsVisible(targetPart)
+    if not Settings.Aimbot.VisibleCheck then return true end
+    
+    local origin = Camera.CFrame.Position
+    local direction = (targetPart.Position - origin).Unit * 500
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    
+    local result = Workspace:Raycast(origin, direction, raycastParams)
+    
+    if result then
+        local hitPart = result.Instance
+        return hitPart:IsDescendantOf(targetPart.Parent)
     end
-})
+    
+    return false
+end
 
-AutoCollectBox:AddLabel('Keybind'):AddKeyPicker('HealthKeybind', {
-    Default = 'None',
-    SyncToggleState = false,
-    Mode = 'Toggle',
-    Text = 'Health collect keybind',
-    NoUI = false,
-    Callback = function(Value)
-        collectHealth = Value
-        updateAutoCollect()
-        Toggles.CollectHealth:SetValue(Value)
-    end,
-    ChangedCallback = function(New)
-        print('[Auto Collect] Health keybind changed to:', New)
-    end
-})
-
-AutoCollectBox:AddDivider()
-
-AutoCollectBox:AddToggle('CollectAmmo', {
-    Text = 'Auto Collect Ammo',
-    Default = false,
-    Tooltip = 'Automatically collect ammo drops',
-    Callback = function(Value)
-        collectAmmo = Value
-        updateAutoCollect()
-    end
-})
-
-AutoCollectBox:AddLabel('Keybind'):AddKeyPicker('AmmoKeybind', {
-    Default = 'None',
-    SyncToggleState = false,
-    Mode = 'Toggle',
-    Text = 'Ammo collect keybind',
-    NoUI = false,
-    Callback = function(Value)
-        collectAmmo = Value
-        updateAutoCollect()
-        Toggles.CollectAmmo:SetValue(Value)
-    end,
-    ChangedCallback = function(New)
-        print('[Auto Collect] Ammo keybind changed to:', New)
-    end
-})
-
-AutoCollectBox:AddDivider()
-AutoCollectBox:AddLabel('Note: Both can be enabled at once!')
-
--- ============================================
--- AIMBOT SECTION
--- ============================================
-local AimbotBox = Tabs.Main:AddLeftGroupbox('Aimbot')
-
--- Aimbot variables
-local aimbotEnabled = false
-local aimbotSmoothness = 50
-local aimbotConnection = nil
-local aimbotTarget = "Head" -- Head or HumanoidRootPart
-local UserInputService = game:GetService("UserInputService")
-
--- Function to get the closest player
-local function getClosestPlayer()
+local function GetClosestPlayerToCursor()
     local closestPlayer = nil
     local shortestDistance = math.huge
-    local localPlayer = Players.LocalPlayer
-    local camera = workspace.CurrentCamera
-    
-    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
     
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= localPlayer and player.Character then
-            local character = player.Character
-            local humanoid = character:FindFirstChild("Humanoid")
-            local targetPart = character:FindFirstChild(aimbotTarget)
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if Settings.Aimbot.TeamCheck and IsTeamMate(player) then continue end
             
-            if humanoid and humanoid.Health > 0 and targetPart then
-                local screenPoint, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+            local character = player.Character
+            local targetPart = character:FindFirstChild(Settings.Aimbot.TargetPart) or character:FindFirstChild("HumanoidRootPart")
+            
+            if targetPart then
+                if Settings.Aimbot.VisibleCheck and not IsVisible(targetPart) then continue end
+                
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
                 
                 if onScreen then
-                    local mouseLocation = UserInputService:GetMouseLocation()
-                    local distance = (Vector2.new(screenPoint.X, screenPoint.Y) - mouseLocation).Magnitude
+                    local mousePos = Vector2.new(Mouse.X, Mouse.Y)
+                    local targetPos = Vector2.new(screenPos.X, screenPos.Y)
+                    local distance = (mousePos - targetPos).Magnitude
                     
-                    if distance < shortestDistance then
+                    if distance < Settings.Aimbot.FOV and distance < shortestDistance then
                         closestPlayer = player
                         shortestDistance = distance
                     end
@@ -183,755 +130,476 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Function to aim at target
-local function aimAtTarget()
-    if not aimbotEnabled then return end
+-- Aimbot Function
+local function Aimbot()
+    if not Settings.Aimbot.Enabled then return end
     
-    local target = getClosestPlayer()
-    if not target or not target.Character then return end
+    local target = GetClosestPlayerToCursor()
     
-    local targetPart = target.Character:FindFirstChild(aimbotTarget)
-    if not targetPart then return end
-    
-    local camera = workspace.CurrentCamera
-    local targetPosition = targetPart.Position
-    
-    -- Calculate smoothness (inverse relationship - lower smoothness = faster aim)
-    local smoothFactor = (101 - aimbotSmoothness) / 100
-    
-    -- Get current camera CFrame and target CFrame
-    local currentCFrame = camera.CFrame
-    local targetCFrame = CFrame.new(camera.CFrame.Position, targetPosition)
-    
-    -- Lerp between current and target based on smoothness
-    camera.CFrame = currentCFrame:Lerp(targetCFrame, smoothFactor)
+    if target and target.Character then
+        local targetPart = target.Character:FindFirstChild(Settings.Aimbot.TargetPart) or target.Character:FindFirstChild("HumanoidRootPart")
+        
+        if targetPart then
+            local targetPos = Camera:WorldToViewportPoint(targetPart.Position)
+            local mousePos = Vector2.new(Mouse.X, Mouse.Y)
+            local targetVector = Vector2.new(targetPos.X, targetPos.Y)
+            
+            local smoothness = Settings.Aimbot.Smoothness
+            local newPos = mousePos:Lerp(targetVector, 1 / smoothness)
+            
+            mousemoverel((newPos.X - mousePos.X), (newPos.Y - mousePos.Y))
+        end
+    end
 end
 
--- Start/stop aimbot
-local function updateAimbot(value)
-    aimbotEnabled = value
+-- ESP Functions
+local function CreateESP(player)
+    if ESPObjects[player] then return end
     
-    if aimbotConnection then
-        aimbotConnection:Disconnect()
-        aimbotConnection = nil
+    local drawings = {}
+    
+    local function newDrawing(class)
+        local drawing = Drawing.new(class)
+        table.insert(drawings, drawing)
+        return drawing
     end
     
-    if aimbotEnabled then
-        aimbotConnection = RunService.RenderStepped:Connect(function()
-            aimAtTarget()
-        end)
-        print("[Aimbot] Enabled")
-    else
-        print("[Aimbot] Disabled")
+    local box = newDrawing("Square")
+    box.Thickness = 2
+    box.Filled = false
+    box.Color = Color3.fromRGB(255, 255, 255)
+    box.Visible = false
+    box.ZIndex = 2
+    
+    local nameLabel = newDrawing("Text")
+    nameLabel.Size = 14
+    nameLabel.Center = true
+    nameLabel.Outline = true
+    nameLabel.Color = Color3.fromRGB(255, 255, 255)
+    nameLabel.Visible = false
+    nameLabel.ZIndex = 2
+    
+    local healthLabel = newDrawing("Text")
+    healthLabel.Size = 14
+    healthLabel.Center = true
+    healthLabel.Outline = true
+    healthLabel.Color = Color3.fromRGB(0, 255, 0)
+    healthLabel.Visible = false
+    healthLabel.ZIndex = 2
+    
+    local distanceLabel = newDrawing("Text")
+    distanceLabel.Size = 14
+    distanceLabel.Center = true
+    distanceLabel.Outline = true
+    distanceLabel.Color = Color3.fromRGB(255, 255, 255)
+    distanceLabel.Visible = false
+    distanceLabel.ZIndex = 2
+    
+    local healthBarOutline = newDrawing("Square")
+    healthBarOutline.Thickness = 3
+    healthBarOutline.Filled = true
+    healthBarOutline.Color = Color3.fromRGB(0, 0, 0)
+    healthBarOutline.Visible = false
+    healthBarOutline.ZIndex = 1
+    
+    local healthBar = newDrawing("Square")
+    healthBar.Thickness = 1
+    healthBar.Filled = true
+    healthBar.Color = Color3.fromRGB(0, 255, 0)
+    healthBar.Visible = false
+    healthBar.ZIndex = 2
+    
+    ESPObjects[player] = {
+        drawings = drawings,
+        box = box,
+        name = nameLabel,
+        health = healthLabel,
+        distance = distanceLabel,
+        healthBarOutline = healthBarOutline,
+        healthBar = healthBar
+    }
+end
+
+local function RemoveESP(player)
+    local esp = ESPObjects[player]
+    if esp then
+        for _, drawing in ipairs(esp.drawings) do
+            drawing:Remove()
+        end
+        ESPObjects[player] = nil
     end
 end
+
+local function UpdateESP()
+    for player, esp in pairs(ESPObjects) do
+        local character = player.Character
+        if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") and character:FindFirstChild("Head") then
+            local humanoid = character.Humanoid
+            local rootPart = character.HumanoidRootPart
+            local head = character.Head
+            
+            if humanoid.Health <= 0 then
+                for _, drawing in ipairs(esp.drawings) do
+                    drawing.Visible = false
+                end
+                continue
+            end
+            
+            if Settings.ESP.TeamCheck and player.Team == LocalPlayer.Team then
+                for _, drawing in ipairs(esp.drawings) do
+                    drawing.Visible = false
+                end
+                continue
+            end
+            
+            local rootPos, rootVis = Camera:WorldToViewportPoint(rootPart.Position)
+            local headPos = Camera:WorldToViewportPoint(head.Position)
+            local legPos = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
+            
+            if rootVis then
+                local height = (headPos.Y - legPos.Y)
+                local width = height / 2
+                
+                -- Box
+                if Settings.ESP.Enabled and Settings.ESP.ShowBoxes then
+                    esp.box.Size = Vector2.new(width, height)
+                    esp.box.Position = Vector2.new(rootPos.X - width / 2, rootPos.Y - height / 2)
+                    esp.box.Visible = true
+                else
+                    esp.box.Visible = false
+                end
+                
+                -- Name
+                if Settings.ESP.Enabled and Settings.ESP.ShowNames then
+                    esp.name.Text = player.Name
+                    esp.name.Position = Vector2.new(rootPos.X, headPos.Y - 20)
+                    esp.name.Size = Settings.ESP.TextSize
+                    esp.name.Visible = true
+                else
+                    esp.name.Visible = false
+                end
+                
+                -- Health
+                if Settings.ESP.Enabled and Settings.ESP.ShowHealth then
+                    local healthPercent = math.floor((humanoid.Health / humanoid.MaxHealth) * 100)
+                    esp.health.Text = tostring(healthPercent) .. "%"
+                    esp.health.Position = Vector2.new(rootPos.X, legPos.Y + 5)
+                    esp.health.Size = Settings.ESP.TextSize
+                    
+                    if healthPercent > 75 then
+                        esp.health.Color = Color3.fromRGB(0, 255, 0)
+                        esp.healthBar.Color = Color3.fromRGB(0, 255, 0)
+                    elseif healthPercent > 50 then
+                        esp.health.Color = Color3.fromRGB(255, 255, 0)
+                        esp.healthBar.Color = Color3.fromRGB(255, 255, 0)
+                    elseif healthPercent > 25 then
+                        esp.health.Color = Color3.fromRGB(255, 165, 0)
+                        esp.healthBar.Color = Color3.fromRGB(255, 165, 0)
+                    else
+                        esp.health.Color = Color3.fromRGB(255, 0, 0)
+                        esp.healthBar.Color = Color3.fromRGB(255, 0, 0)
+                    end
+                    
+                    esp.health.Visible = true
+                    
+                    -- Health Bar
+                    local barHeight = height * (healthPercent / 100)
+                    esp.healthBarOutline.Size = Vector2.new(4, height + 2)
+                    esp.healthBarOutline.Position = Vector2.new(rootPos.X - width / 2 - 7, rootPos.Y - height / 2 - 1)
+                    esp.healthBar.Size = Vector2.new(2, barHeight)
+                    esp.healthBar.Position = Vector2.new(rootPos.X - width / 2 - 6, rootPos.Y + height / 2 - barHeight)
+                    esp.healthBarOutline.Visible = true
+                    esp.healthBar.Visible = true
+                else
+                    esp.health.Visible = false
+                    esp.healthBarOutline.Visible = false
+                    esp.healthBar.Visible = false
+                end
+                
+                -- Distance
+                if Settings.ESP.Enabled and Settings.ESP.ShowDistance and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local distance = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude)
+                    esp.distance.Text = tostring(distance) .. " studs"
+                    esp.distance.Position = Vector2.new(rootPos.X, legPos.Y + 20)
+                    esp.distance.Size = Settings.ESP.TextSize
+                    esp.distance.Visible = true
+                else
+                    esp.distance.Visible = false
+                end
+            else
+                for _, drawing in ipairs(esp.drawings) do
+                    drawing.Visible = false
+                end
+            end
+        else
+            for _, drawing in ipairs(esp.drawings) do
+                drawing.Visible = false
+            end
+        end
+    end
+end
+
+-- Triggerbot
+local triggerDebounce = false
+local function Triggerbot()
+    if not Settings.Triggerbot.Enabled or triggerDebounce then return end
+    
+    local target = Mouse.Target
+    if target and target.Parent:FindFirstChild("Humanoid") then
+        local player = Players:GetPlayerFromCharacter(target.Parent)
+        if player and player ~= LocalPlayer then
+            if Settings.Triggerbot.TeamCheck and IsTeamMate(player) then return end
+            
+            triggerDebounce = true
+            mouse1click()
+            wait(Settings.Triggerbot.Delay)
+            triggerDebounce = false
+        end
+    end
+end
+
+-- Create ESP for all players
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        CreateESP(player)
+    end
+end
+
+-- Player events
+Players.PlayerAdded:Connect(function(player)
+    CreateESP(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player)
+end)
+
+-- Create UI
+local Window = Library:CreateWindow({
+    Title = 'zzzzz',
+    Center = true,
+    AutoShow = true,
+    TabPadding = 8,
+    MenuFadeTime = 0.2
+})
+
+local Tabs = {
+    Combat = Window:AddTab('Combat'),
+    Visuals = Window:AddTab('Visuals'),
+    ['UI Settings'] = Window:AddTab('UI Settings'),
+}
+
+-- Combat Tab
+local AimbotBox = Tabs.Combat:AddLeftGroupbox('Aimbot')
 
 AimbotBox:AddToggle('AimbotEnabled', {
     Text = 'Enable Aimbot',
     Default = false,
     Tooltip = 'Toggle aimbot on/off',
     Callback = function(Value)
-        updateAimbot(Value)
+        Settings.Aimbot.Enabled = Value
     end
 })
 
-AimbotBox:AddLabel('Keybind'):AddKeyPicker('AimbotKeybind', {
-    Default = 'H',
-    SyncToggleState = false,
-    Mode = 'Hold',
-    Text = 'Aimbot keybind',
-    NoUI = false,
+AimbotBox:AddToggle('AimbotTeamCheck', {
+    Text = 'Team Check',
+    Default = true,
+    Tooltip = 'Don\'t aim at teammates',
     Callback = function(Value)
-        updateAimbot(Value)
-    end,
-    ChangedCallback = function(New)
-        print('[Aimbot] Keybind changed to:', New)
+        Settings.Aimbot.TeamCheck = Value
     end
 })
 
-AimbotBox:AddDivider()
+AimbotBox:AddToggle('AimbotVisibleCheck', {
+    Text = 'Visible Check',
+    Default = true,
+    Tooltip = 'Only aim at visible players',
+    Callback = function(Value)
+        Settings.Aimbot.VisibleCheck = Value
+    end
+})
+
+AimbotBox:AddDropdown('AimbotTargetPart', {
+    Values = {'Head', 'HumanoidRootPart', 'UpperTorso', 'LowerTorso'},
+    Default = 1,
+    Multi = false,
+    Text = 'Target Part',
+    Tooltip = 'Which body part to aim at',
+    Callback = function(Value)
+        Settings.Aimbot.TargetPart = Value
+    end
+})
 
 AimbotBox:AddSlider('AimbotSmoothness', {
     Text = 'Smoothness',
-    Default = 50,
+    Default = 1,
     Min = 1,
-    Max = 100,
+    Max = 10,
+    Rounding = 1,
+    Compact = false,
+    Callback = function(Value)
+        Settings.Aimbot.Smoothness = Value
+    end
+})
+
+AimbotBox:AddSlider('AimbotFOV', {
+    Text = 'FOV',
+    Default = 100,
+    Min = 10,
+    Max = 500,
     Rounding = 0,
     Compact = false,
-    Tooltip = '1 = Very fast, 100 = Very slow/smooth',
     Callback = function(Value)
-        aimbotSmoothness = Value
+        Settings.Aimbot.FOV = Value
+        FOVCircle.Radius = Value
     end
 })
 
-AimbotBox:AddDivider()
-
-AimbotBox:AddDropdown('AimbotTarget', {
-    Values = { 'Head', 'HumanoidRootPart' },
-    Default = 1, -- Head
-    Multi = false,
-    Text = 'Target Part',
-    Tooltip = 'Choose where to aim (Head or Torso)',
+AimbotBox:AddToggle('ShowFOV', {
+    Text = 'Show FOV Circle',
+    Default = true,
+    Tooltip = 'Display FOV circle',
     Callback = function(Value)
-        aimbotTarget = Value
+        Settings.Aimbot.ShowFOV = Value
+        FOVCircle.Visible = Value
     end
 })
 
-AimbotBox:AddDivider()
-AimbotBox:AddLabel('Hold keybind to aim at\nclosest enemy to crosshair', true)
+local TriggerbotBox = Tabs.Combat:AddRightGroupbox('Triggerbot')
 
--- ============================================
--- ESP SECTION
--- ============================================
-local ESPBox = Tabs.Main:AddRightGroupbox('ESP')
-
--- ESP variables
-local espEnabled = false
-local showBoxes = true
-local showNames = true
-local showHealth = true
-local showDistance = true
-local showTracers = false
-local espColor = Color3.fromRGB(255, 0, 0)
-local espConnections = {}
-local espObjects = {}
-local espUpdateRate = 2 -- Update every N frames for performance
-
--- Function to create ESP for a player
-local function createESP(player)
-    if player == Players.LocalPlayer then return end
-    
-    local espFolder = Instance.new("Folder")
-    espFolder.Name = "ESP_" .. player.Name
-    espFolder.Parent = game.CoreGui
-    
-    espObjects[player] = espFolder
-    
-    -- Box ESP
-    local boxESP = Drawing.new("Square")
-    boxESP.Visible = false
-    boxESP.Color = espColor
-    boxESP.Thickness = 2
-    boxESP.Transparency = 1
-    boxESP.Filled = false
-    
-    -- Name ESP
-    local nameESP = Drawing.new("Text")
-    nameESP.Visible = false
-    nameESP.Color = espColor
-    nameESP.Size = 18
-    nameESP.Center = true
-    nameESP.Outline = true
-    nameESP.Font = 2
-    nameESP.Text = player.Name
-    
-    -- Health ESP
-    local healthESP = Drawing.new("Text")
-    healthESP.Visible = false
-    healthESP.Color = Color3.fromRGB(0, 255, 0)
-    healthESP.Size = 16
-    healthESP.Center = true
-    healthESP.Outline = true
-    healthESP.Font = 2
-    
-    -- Distance ESP
-    local distanceESP = Drawing.new("Text")
-    distanceESP.Visible = false
-    distanceESP.Color = Color3.fromRGB(255, 255, 255)
-    distanceESP.Size = 14
-    distanceESP.Center = true
-    distanceESP.Outline = true
-    distanceESP.Font = 2
-    
-    -- Tracer ESP
-    local tracerESP = Drawing.new("Line")
-    tracerESP.Visible = false
-    tracerESP.Color = espColor
-    tracerESP.Thickness = 1
-    tracerESP.Transparency = 1
-    
-    -- Health Bar
-    local healthBarOutline = Drawing.new("Square")
-    healthBarOutline.Visible = false
-    healthBarOutline.Color = Color3.fromRGB(0, 0, 0)
-    healthBarOutline.Thickness = 1
-    healthBarOutline.Transparency = 1
-    healthBarOutline.Filled = false
-    
-    local healthBarFill = Drawing.new("Square")
-    healthBarFill.Visible = false
-    healthBarFill.Color = Color3.fromRGB(0, 255, 0)
-    healthBarFill.Thickness = 1
-    healthBarFill.Transparency = 0.5
-    healthBarFill.Filled = true
-    
-    local frameCount = 0
-    
-    local function updateESP()
-        frameCount = frameCount + 1
-        if frameCount % espUpdateRate ~= 0 then return end
-        
-        if not espEnabled then
-            boxESP.Visible = false
-            nameESP.Visible = false
-            healthESP.Visible = false
-            distanceESP.Visible = false
-            tracerESP.Visible = false
-            healthBarOutline.Visible = false
-            healthBarFill.Visible = false
-            return
-        end
-        
-        local character = player.Character
-        if not character then
-            boxESP.Visible = false
-            nameESP.Visible = false
-            healthESP.Visible = false
-            distanceESP.Visible = false
-            tracerESP.Visible = false
-            healthBarOutline.Visible = false
-            healthBarFill.Visible = false
-            return
-        end
-        
-        local humanoid = character:FindFirstChild("Humanoid")
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        
-        if not rootPart or not humanoid or humanoid.Health <= 0 then
-            boxESP.Visible = false
-            nameESP.Visible = false
-            healthESP.Visible = false
-            distanceESP.Visible = false
-            tracerESP.Visible = false
-            healthBarOutline.Visible = false
-            healthBarFill.Visible = false
-            return
-        end
-        
-        local camera = workspace.CurrentCamera
-        local vector, onScreen = camera:WorldToViewportPoint(rootPart.Position)
-        
-        if onScreen then
-            local head = character:FindFirstChild("Head")
-            local headPos = head and head.Position or rootPart.Position + Vector3.new(0, 2, 0)
-            local legPos = rootPart.Position - Vector3.new(0, 3, 0)
-            
-            local topVector = camera:WorldToViewportPoint(headPos)
-            local bottomVector = camera:WorldToViewportPoint(legPos)
-            
-            local height = math.abs(topVector.Y - bottomVector.Y)
-            local width = height / 2
-            
-            -- Update Box ESP
-            if showBoxes then
-                boxESP.Size = Vector2.new(width, height)
-                boxESP.Position = Vector2.new(vector.X - width / 2, vector.Y - height / 2)
-                boxESP.Color = espColor
-                boxESP.Visible = true
-            else
-                boxESP.Visible = false
-            end
-            
-            -- Update Name ESP
-            if showNames then
-                nameESP.Position = Vector2.new(vector.X, topVector.Y - 20)
-                nameESP.Color = espColor
-                nameESP.Text = player.Name
-                nameESP.Visible = true
-            else
-                nameESP.Visible = false
-            end
-            
-            -- Calculate distance
-            local distance = (Players.LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
-            
-            -- Update Health ESP
-            if showHealth then
-                local healthPercent = math.floor((humanoid.Health / humanoid.MaxHealth) * 100)
-                healthESP.Position = Vector2.new(vector.X, bottomVector.Y + 5)
-                healthESP.Text = healthPercent .. "%"
-                
-                -- Color based on health
-                if healthPercent > 75 then
-                    healthESP.Color = Color3.fromRGB(0, 255, 0)
-                elseif healthPercent > 50 then
-                    healthESP.Color = Color3.fromRGB(255, 255, 0)
-                elseif healthPercent > 25 then
-                    healthESP.Color = Color3.fromRGB(255, 165, 0)
-                else
-                    healthESP.Color = Color3.fromRGB(255, 0, 0)
-                end
-                healthESP.Visible = true
-                
-                -- Health bar
-                healthBarOutline.Size = Vector2.new(4, height)
-                healthBarOutline.Position = Vector2.new(vector.X - width / 2 - 6, vector.Y - height / 2)
-                healthBarOutline.Visible = true
-                
-                local healthHeight = height * (humanoid.Health / humanoid.MaxHealth)
-                healthBarFill.Size = Vector2.new(2, healthHeight)
-                healthBarFill.Position = Vector2.new(vector.X - width / 2 - 5, vector.Y + height / 2 - healthHeight)
-                healthBarFill.Color = healthESP.Color
-                healthBarFill.Visible = true
-            else
-                healthESP.Visible = false
-                healthBarOutline.Visible = false
-                healthBarFill.Visible = false
-            end
-            
-            -- Update Distance ESP
-            if showDistance then
-                distanceESP.Position = Vector2.new(vector.X, bottomVector.Y + 20)
-                distanceESP.Text = math.floor(distance) .. " studs"
-                distanceESP.Visible = true
-            else
-                distanceESP.Visible = false
-            end
-            
-            -- Update Tracer ESP
-            if showTracers then
-                local screenSize = camera.ViewportSize
-                tracerESP.From = Vector2.new(screenSize.X / 2, screenSize.Y)
-                tracerESP.To = Vector2.new(vector.X, vector.Y)
-                tracerESP.Color = espColor
-                tracerESP.Visible = true
-            else
-                tracerESP.Visible = false
-            end
-        else
-            boxESP.Visible = false
-            nameESP.Visible = false
-            healthESP.Visible = false
-            distanceESP.Visible = false
-            tracerESP.Visible = false
-            healthBarOutline.Visible = false
-            healthBarFill.Visible = false
-        end
+TriggerbotBox:AddToggle('TriggerbotEnabled', {
+    Text = 'Enable Triggerbot',
+    Default = false,
+    Tooltip = 'Auto-shoot when hovering over enemies',
+    Callback = function(Value)
+        Settings.Triggerbot.Enabled = Value
     end
-    
-    local connection = RunService.Heartbeat:Connect(updateESP)
-    espConnections[player] = {
-        connection = connection,
-        drawings = {boxESP, nameESP, healthESP, distanceESP, tracerESP, healthBarOutline, healthBarFill}
-    }
-end
+})
 
--- Function to remove ESP for a player
-local function removeESP(player)
-    if espConnections[player] then
-        espConnections[player].connection:Disconnect()
-        for _, drawing in pairs(espConnections[player].drawings) do
-            drawing:Remove()
-        end
-        espConnections[player] = nil
+TriggerbotBox:AddToggle('TriggerbotTeamCheck', {
+    Text = 'Team Check',
+    Default = true,
+    Tooltip = 'Don\'t shoot teammates',
+    Callback = function(Value)
+        Settings.Triggerbot.TeamCheck = Value
     end
-    
-    if espObjects[player] then
-        espObjects[player]:Destroy()
-        espObjects[player] = nil
-    end
-end
+})
 
--- Function to update all ESP
-local function updateAllESP()
-    for player, _ in pairs(espConnections) do
-        if not player or not player.Parent then
-            removeESP(player)
-        end
+TriggerbotBox:AddSlider('TriggerbotDelay', {
+    Text = 'Delay (seconds)',
+    Default = 0.1,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Compact = false,
+    Callback = function(Value)
+        Settings.Triggerbot.Delay = Value
     end
-end
+})
 
--- Function to toggle ESP
-local function toggleESP(value)
-    espEnabled = value
-    if espEnabled then
-        initializeESP()
-        print("[ESP] Enabled")
-    else
-        for player, _ in pairs(espConnections) do
-            removeESP(player)
-        end
-        print("[ESP] Disabled")
-    end
-end
+-- Visuals Tab
+local ESPBox = Tabs.Visuals:AddLeftGroupbox('ESP')
 
--- Initialize ESP for existing players
-local function initializeESP()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= Players.LocalPlayer and not espConnections[player] then
-            createESP(player)
-        end
-    end
-end
-
--- ESP Toggles and Settings
 ESPBox:AddToggle('ESPEnabled', {
     Text = 'Enable ESP',
     Default = false,
     Tooltip = 'Toggle ESP on/off',
     Callback = function(Value)
-        toggleESP(Value)
+        Settings.ESP.Enabled = Value
     end
 })
 
-ESPBox:AddLabel('Keybind'):AddKeyPicker('ESPKeybind', {
-    Default = 'None',
-    SyncToggleState = false,
-    Mode = 'Toggle',
-    Text = 'ESP keybind',
-    NoUI = false,
-    Callback = function(Value)
-        toggleESP(Value)
-    end,
-    ChangedCallback = function(New)
-        print('[ESP] Keybind changed to:', New)
-    end
-})
-
-ESPBox:AddDivider()
-
-ESPBox:AddToggle('ShowBoxes', {
-    Text = 'Show Boxes',
+ESPBox:AddToggle('ESPTeamCheck', {
+    Text = 'Team Check',
     Default = true,
-    Tooltip = 'Show box around players',
+    Tooltip = 'Don\'t show ESP for teammates',
     Callback = function(Value)
-        showBoxes = Value
+        Settings.ESP.TeamCheck = Value
     end
 })
 
-ESPBox:AddToggle('ShowNames', {
+ESPBox:AddToggle('ESPNames', {
     Text = 'Show Names',
     Default = true,
-    Tooltip = 'Show player names',
+    Tooltip = 'Display player names',
     Callback = function(Value)
-        showNames = Value
+        Settings.ESP.ShowNames = Value
     end
 })
 
-ESPBox:AddToggle('ShowHealth', {
+ESPBox:AddToggle('ESPBoxes', {
+    Text = 'Show Boxes',
+    Default = true,
+    Tooltip = 'Display bounding boxes',
+    Callback = function(Value)
+        Settings.ESP.ShowBoxes = Value
+    end
+})
+
+ESPBox:AddToggle('ESPHealth', {
     Text = 'Show Health',
     Default = true,
-    Tooltip = 'Show player health percentage and bar',
+    Tooltip = 'Display health bars',
     Callback = function(Value)
-        showHealth = Value
+        Settings.ESP.ShowHealth = Value
     end
 })
 
-ESPBox:AddToggle('ShowDistance', {
+ESPBox:AddToggle('ESPDistance', {
     Text = 'Show Distance',
     Default = true,
-    Tooltip = 'Show distance to players',
+    Tooltip = 'Display distance in studs',
     Callback = function(Value)
-        showDistance = Value
+        Settings.ESP.ShowDistance = Value
     end
 })
 
-ESPBox:AddToggle('ShowTracers', {
-    Text = 'Show Tracers',
-    Default = false,
-    Tooltip = 'Show lines to players',
-    Callback = function(Value)
-        showTracers = Value
-    end
-})
-
-ESPBox:AddDivider()
-
-ESPBox:AddLabel('ESP Color'):AddColorPicker('ESPColor', {
-    Default = Color3.fromRGB(255, 0, 0),
-    Title = 'ESP Color',
-    Callback = function(Value)
-        espColor = Value
-    end
-})
-
-ESPBox:AddDivider()
-ESPBox:AddLabel('ESP shows through walls\nand updates in real-time', true)
-
--- Player events
-Players.PlayerAdded:Connect(function(player)
-    if espEnabled and player ~= Players.LocalPlayer then
-        task.wait(1)
-        createESP(player)
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    removeESP(player)
-end)
-
--- ============================================
--- VOID SPAM TELEPORT SECTION
--- ============================================
-local TeleportBox = Tabs.Main:AddRightGroupbox('Void Spam Teleport')
-
--- Variables for teleport
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-
-local isTeleporting = false
-local teleportLoop = nil
-local minDistance = 500
-local maxDistance = 10000
-local teleportDelay = 0.1
-
--- Function to perform a single teleport
-local function teleportOnce()
-    if not character or not humanoidRootPart then 
-        return 
-    end
-    
-    local currentPosition = humanoidRootPart.Position
-    local randomAngle = math.random() * math.pi * 2
-    local randomDistance = math.random(minDistance, maxDistance)
-    
-    local newX = currentPosition.X + math.cos(randomAngle) * randomDistance
-    local newZ = currentPosition.Z + math.sin(randomAngle) * randomDistance
-    local newY = currentPosition.Y + 100
-    
-    humanoidRootPart.CFrame = CFrame.new(newX, newY, newZ)
-end
-
--- Toggle teleport function
-local function toggleTeleportMode(value)
-    isTeleporting = value
-    
-    if isTeleporting then
-        print("Starting continuous teleport...")
-        print("Distance range: " .. minDistance .. " to " .. maxDistance .. " studs")
-        print("Teleport delay: " .. teleportDelay .. " seconds")
-        
-        teleportLoop = task.spawn(function()
-            while isTeleporting do
-                teleportOnce()
-                task.wait(teleportDelay)
-            end
-        end)
-    else
-        print("Stopping teleport...")
-        isTeleporting = false
-    end
-end
-
-TeleportBox:AddToggle('VoidSpam', {
-    Text = 'Enable Void Spam',
-    Default = false,
-    Tooltip = 'Toggle continuous random teleportation',
-    Callback = function(Value)
-        toggleTeleportMode(Value)
-        Toggles.VoidSpam:SetValue(Value)
-    end
-})
-
-TeleportBox:AddLabel('Keybind'):AddKeyPicker('VoidSpamKeybind', {
-    Default = 'P',
-    SyncToggleState = false,
-    Mode = 'Toggle',
-    Text = 'Void spam keybind',
-    NoUI = false,
-    Callback = function(Value)
-        toggleTeleportMode(Value)
-        Toggles.VoidSpam:SetValue(Value)
-    end,
-    ChangedCallback = function(New)
-        print('[Void Spam] Keybind changed to:', New)
-    end
-})
-
-TeleportBox:AddDivider()
-
-TeleportBox:AddSlider('MinDistance', {
-    Text = 'Min Distance',
-    Default = 500,
-    Min = 100,
-    Max = 5000,
+ESPBox:AddSlider('ESPTextSize', {
+    Text = 'Text Size',
+    Default = 14,
+    Min = 10,
+    Max = 24,
     Rounding = 0,
     Compact = false,
     Callback = function(Value)
-        minDistance = Value
-        -- Make sure min doesn't exceed max
-        if minDistance > maxDistance then
-            Options.MaxDistance:SetValue(minDistance)
-        end
+        Settings.ESP.TextSize = Value
     end
 })
 
-TeleportBox:AddSlider('MaxDistance', {
-    Text = 'Max Distance',
-    Default = 10000,
-    Min = 500,
-    Max = 20000,
-    Rounding = 0,
-    Compact = false,
-    Callback = function(Value)
-        maxDistance = Value
-        -- Make sure max doesn't go below min
-        if maxDistance < minDistance then
-            Options.MinDistance:SetValue(maxDistance)
-        end
-    end
-})
-
-TeleportBox:AddSlider('TeleportDelay', {
-    Text = 'Teleport Delay (seconds)',
-    Default = 0.1,
-    Min = 0.01,
-    Max = 2,
-    Rounding = 2,
-    Compact = false,
-    Callback = function(Value)
-        teleportDelay = Value
-    end
-})
-
-TeleportBox:AddDivider()
-TeleportBox:AddLabel('Teleports to random locations\nwithin the distance range', true)
-
--- Handle character respawns
-player.CharacterAdded:Connect(function(newCharacter)
-    character = newCharacter
-    humanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
-    
-    -- If teleporting was active, restart it
-    if isTeleporting then
-        local wasActive = isTeleporting
-        toggleTeleportMode(false)
-        task.wait(0.5)
-        if wasActive then
-            toggleTeleportMode(true)
-        end
-    end
-end)
-
--- ============================================
--- LIBRARY SETTINGS
--- ============================================
-
-local showWatermark = true
-
-Library:SetWatermarkVisibility(showWatermark)
-
-local FrameTimer = tick()
-local FrameCounter = 0
-local FPS = 60
-
-local WatermarkConnection = RunService.Heartbeat:Connect(function()
-    if not showWatermark then return end
-    
-    FrameCounter = FrameCounter + 1
-    
-    if (tick() - FrameTimer) >= 1 then
-        FPS = FrameCounter
-        FrameTimer = tick()
-        FrameCounter = 0
-        
-        Library:SetWatermark(('claude code | %s fps | %s ms'):format(
-            math.floor(FPS),
-            math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
-        ))
-    end
-end)
-
-Library.KeybindFrame.Visible = true
-
-Library:OnUnload(function()
-    WatermarkConnection:Disconnect()
-    
-    -- Clean up auto collect
-    if collectConnection then
-        collectConnection:Disconnect()
-    end
-    
-    -- Clean up aimbot
-    if aimbotConnection then
-        aimbotConnection:Disconnect()
-    end
-    
-    -- Clean up ESP
-    for player, _ in pairs(espConnections) do
-        removeESP(player)
-    end
-    
-    -- Clean up teleport
-    if isTeleporting then
-        toggleTeleportMode(false)
-    end
-    
-    print('Unloaded!')
-    Library.Unloaded = true
-end)
-
--- ============================================
--- SETTINGS TAB
--- ============================================
-local SettingsGroup = Tabs.Settings:AddLeftGroupbox('Performance & Display')
-
-SettingsGroup:AddToggle('ShowWatermark', {
-    Text = 'Show FPS/Ping Watermark',
-    Default = true,
-    Tooltip = 'Toggle FPS and ping display',
-    Callback = function(Value)
-        showWatermark = Value
-        Library:SetWatermarkVisibility(Value)
-    end
-})
-
-SettingsGroup:AddDivider()
-
-SettingsGroup:AddSlider('ESPUpdateRate', {
-    Text = 'ESP Update Rate',
-    Default = 2,
-    Min = 1,
-    Max = 5,
-    Rounding = 0,
-    Tooltip = 'Higher = Better performance, Lower = Smoother ESP (1-5 frames)',
-    Callback = function(Value)
-        espUpdateRate = Value
-    end
-})
-
-SettingsGroup:AddDivider()
-
-SettingsGroup:AddLabel('Keybind Modes:', true)
-SettingsGroup:AddLabel('Toggle: Press to turn on/off\nHold: Only active while held\nAlways: Always active (can\'t toggle off)', true)
-SettingsGroup:AddDivider()
-SettingsGroup:AddLabel('Note: Keybind modes are set when\ncreating the keybind. To change\nmodes, you need to reassign the key.', true)
-
-local KeybindInfoGroup = Tabs.Settings:AddRightGroupbox('Feature Status')
-KeybindInfoGroup:AddLabel('Current keybind settings:', true)
-KeybindInfoGroup:AddDivider()
-KeybindInfoGroup:AddLabel('• Aimbot: Hold mode (H key)')
-KeybindInfoGroup:AddLabel('• ESP: Toggle mode')
-KeybindInfoGroup:AddLabel('• Void Spam: Toggle mode (P key)')
-KeybindInfoGroup:AddLabel('• Auto Collect: Toggle modes')
-
--- ============================================
--- UI SETTINGS TAB
--- ============================================
+-- UI Settings
 local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
 
 MenuGroup:AddButton('Unload', function() Library:Unload() end)
-MenuGroup:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', { 
-    Default = 'End', 
-    NoUI = true, 
-    Text = 'Menu keybind' 
-})
+MenuGroup:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', { Default = 'End', NoUI = true, Text = 'Menu keybind' })
 
 Library.ToggleKeybind = Options.MenuKeybind
 
--- Theme and Save Manager setup
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
 SaveManager:IgnoreThemeSettings()
+
 SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
 
-ThemeManager:SetFolder('XCScriptHub')
-SaveManager:SetFolder('XCScriptHub/configs')
+ThemeManager:SetFolder('zzzzzz')
+SaveManager:SetFolder('zzzzzz/specific-game')
 
 SaveManager:BuildConfigSection(Tabs['UI Settings'])
 ThemeManager:ApplyToTab(Tabs['UI Settings'])
 
 SaveManager:LoadAutoloadConfig()
 
+-- Main Loop
+RunService.RenderStepped:Connect(function()
+    -- Update FOV Circle position
+    FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
+    
+    -- Run Aimbot
+    Aimbot()
+    
+    -- Update ESP
+    UpdateESP()
+    
+    -- Run Triggerbot
+    Triggerbot()
+end)
