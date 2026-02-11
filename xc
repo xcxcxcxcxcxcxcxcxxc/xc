@@ -18,7 +18,7 @@ local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 
 local Window = Library:CreateWindow({
-    Title = 'claude code baby',
+    Title = 'XC Script Hub',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -90,13 +90,17 @@ AutoCollectBox:AddToggle('CollectHealth', {
 
 AutoCollectBox:AddLabel('Keybind'):AddKeyPicker('HealthKeybind', {
     Default = 'None',
-    SyncToggleState = true,
+    SyncToggleState = false,
     Mode = 'Toggle',
     Text = 'Health collect keybind',
     NoUI = false,
     Callback = function(Value)
         collectHealth = Value
         updateAutoCollect()
+        Toggles.CollectHealth:SetValue(Value)
+    end,
+    ChangedCallback = function(New)
+        print('[Auto Collect] Health keybind changed to:', New)
     end
 })
 
@@ -114,13 +118,17 @@ AutoCollectBox:AddToggle('CollectAmmo', {
 
 AutoCollectBox:AddLabel('Keybind'):AddKeyPicker('AmmoKeybind', {
     Default = 'None',
-    SyncToggleState = true,
+    SyncToggleState = false,
     Mode = 'Toggle',
     Text = 'Ammo collect keybind',
     NoUI = false,
     Callback = function(Value)
         collectAmmo = Value
         updateAutoCollect()
+        Toggles.CollectAmmo:SetValue(Value)
+    end,
+    ChangedCallback = function(New)
+        print('[Auto Collect] Ammo keybind changed to:', New)
     end
 })
 
@@ -145,6 +153,10 @@ local function getClosestPlayer()
     local shortestDistance = math.huge
     local localPlayer = Players.LocalPlayer
     local camera = workspace.CurrentCamera
+    
+    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
     
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= localPlayer and player.Character then
@@ -196,7 +208,9 @@ local function aimAtTarget()
 end
 
 -- Start/stop aimbot
-local function updateAimbot()
+local function updateAimbot(value)
+    aimbotEnabled = value
+    
     if aimbotConnection then
         aimbotConnection:Disconnect()
         aimbotConnection = nil
@@ -206,6 +220,9 @@ local function updateAimbot()
         aimbotConnection = RunService.RenderStepped:Connect(function()
             aimAtTarget()
         end)
+        print("[Aimbot] Enabled")
+    else
+        print("[Aimbot] Disabled")
     end
 end
 
@@ -214,20 +231,21 @@ AimbotBox:AddToggle('AimbotEnabled', {
     Default = false,
     Tooltip = 'Toggle aimbot on/off',
     Callback = function(Value)
-        aimbotEnabled = Value
-        updateAimbot()
+        updateAimbot(Value)
     end
 })
 
 AimbotBox:AddLabel('Keybind'):AddKeyPicker('AimbotKeybind', {
     Default = 'H',
-    SyncToggleState = true,
+    SyncToggleState = false,
     Mode = 'Hold',
     Text = 'Aimbot keybind',
     NoUI = false,
     Callback = function(Value)
-        aimbotEnabled = Value
-        updateAimbot()
+        updateAimbot(Value)
+    end,
+    ChangedCallback = function(New)
+        print('[Aimbot] Keybind changed to:', New)
     end
 })
 
@@ -523,10 +541,24 @@ local function updateAllESP()
     end
 end
 
+-- Function to toggle ESP
+local function toggleESP(value)
+    espEnabled = value
+    if espEnabled then
+        initializeESP()
+        print("[ESP] Enabled")
+    else
+        for player, _ in pairs(espConnections) do
+            removeESP(player)
+        end
+        print("[ESP] Disabled")
+    end
+end
+
 -- Initialize ESP for existing players
 local function initializeESP()
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= Players.LocalPlayer then
+        if player ~= Players.LocalPlayer and not espConnections[player] then
             createESP(player)
         end
     end
@@ -538,32 +570,21 @@ ESPBox:AddToggle('ESPEnabled', {
     Default = false,
     Tooltip = 'Toggle ESP on/off',
     Callback = function(Value)
-        espEnabled = Value
-        if espEnabled then
-            initializeESP()
-        else
-            for player, _ in pairs(espConnections) do
-                removeESP(player)
-            end
-        end
+        toggleESP(Value)
     end
 })
 
 ESPBox:AddLabel('Keybind'):AddKeyPicker('ESPKeybind', {
     Default = 'None',
-    SyncToggleState = true,
+    SyncToggleState = false,
     Mode = 'Toggle',
     Text = 'ESP keybind',
     NoUI = false,
     Callback = function(Value)
-        espEnabled = Value
-        if espEnabled then
-            initializeESP()
-        else
-            for player, _ in pairs(espConnections) do
-                removeESP(player)
-            end
-        end
+        toggleESP(Value)
+    end,
+    ChangedCallback = function(New)
+        print('[ESP] Keybind changed to:', New)
     end
 })
 
@@ -699,17 +720,22 @@ TeleportBox:AddToggle('VoidSpam', {
     Tooltip = 'Toggle continuous random teleportation',
     Callback = function(Value)
         toggleTeleportMode(Value)
+        Toggles.VoidSpam:SetValue(Value)
     end
 })
 
 TeleportBox:AddLabel('Keybind'):AddKeyPicker('VoidSpamKeybind', {
     Default = 'P',
-    SyncToggleState = true,
+    SyncToggleState = false,
     Mode = 'Toggle',
     Text = 'Void spam keybind',
     NoUI = false,
     Callback = function(Value)
         toggleTeleportMode(Value)
+        Toggles.VoidSpam:SetValue(Value)
+    end,
+    ChangedCallback = function(New)
+        print('[Void Spam] Keybind changed to:', New)
     end
 })
 
@@ -867,15 +893,18 @@ SettingsGroup:AddSlider('ESPUpdateRate', {
 
 SettingsGroup:AddDivider()
 
-SettingsGroup:AddLabel('Keybind Modes Info:', true)
-SettingsGroup:AddLabel('Toggle: Press once to turn on/off\nHold: Only active while holding\nAlways: Always active', true)
+SettingsGroup:AddLabel('Keybind Modes:', true)
+SettingsGroup:AddLabel('Toggle: Press to turn on/off\nHold: Only active while held\nAlways: Always active (can\'t toggle off)', true)
+SettingsGroup:AddDivider()
+SettingsGroup:AddLabel('Note: Keybind modes are set when\ncreating the keybind. To change\nmodes, you need to reassign the key.', true)
 
-local KeybindInfoGroup = Tabs.Settings:AddRightGroupbox('Keybind Info')
-KeybindInfoGroup:AddLabel('Right-click any keybind to\nchange its mode:', true)
+local KeybindInfoGroup = Tabs.Settings:AddRightGroupbox('Feature Status')
+KeybindInfoGroup:AddLabel('Current keybind settings:', true)
 KeybindInfoGroup:AddDivider()
-KeybindInfoGroup:AddLabel('• Toggle - Press to turn on/off')
-KeybindInfoGroup:AddLabel('• Hold - Only active while held')
-KeybindInfoGroup:AddLabel('• Always - Always active')
+KeybindInfoGroup:AddLabel('• Aimbot: Hold mode (H key)')
+KeybindInfoGroup:AddLabel('• ESP: Toggle mode')
+KeybindInfoGroup:AddLabel('• Void Spam: Toggle mode (P key)')
+KeybindInfoGroup:AddLabel('• Auto Collect: Toggle modes')
 
 -- ============================================
 -- UI SETTINGS TAB
