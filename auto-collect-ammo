@@ -1,0 +1,22 @@
+local collectHealth = true
+local collectAmmo = true
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+RunService.RenderStepped:Connect(function()
+    local character = Players.LocalPlayer.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local humanoid = character:FindFirstChild("Humanoid")
+    local needsHealth = humanoid and humanoid.Health < humanoid.MaxHealth
+    for _, obj in workspace:GetChildren() do
+        if obj.Name == "_drop" and obj:IsA("BasePart") then
+            if (collectHealth and obj:FindFirstChild("Health") and needsHealth) or (collectAmmo and obj:FindFirstChild("Ammo")) then
+                firetouchinterest(hrp, obj, 0)
+                firetouchinterest(hrp, obj, 1)
+            end
+        end
+    end
+end)
