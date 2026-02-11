@@ -1,0 +1,88 @@
+-- Get services we need
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+-- Get our player and character
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Settings (you can change these!)
+local TELEPORT_KEY = Enum.KeyCode.P
+local MIN_DISTANCE = 500      -- Minimum teleport distance
+local MAX_DISTANCE = 10000    -- Maximum teleport distance
+local TELEPORT_DELAY = 0.1    -- Time between teleports (seconds)
+
+-- Keep track of whether we're teleporting
+local isTeleporting = false
+local teleportLoop = nil
+
+-- Function to perform a single teleport
+local function teleportOnce()
+    -- Safety check
+    if not character or not humanoidRootPart then 
+        return 
+    end
+    
+    -- Get our current position
+    local currentPosition = humanoidRootPart.Position
+    
+    -- Pick a random direction and distance
+    local randomAngle = math.random() * math.pi * 2
+    local randomDistance = math.random(MIN_DISTANCE, MAX_DISTANCE)
+    
+    -- Calculate new position
+    local newX = currentPosition.X + math.cos(randomAngle) * randomDistance
+    local newZ = currentPosition.Z + math.sin(randomAngle) * randomDistance
+    local newY = currentPosition.Y + 100  -- Start a bit above current position
+    
+    -- Move to new position
+    humanoidRootPart.CFrame = CFrame.new(newX, newY, newZ)
+end
+
+-- Toggle teleport on/off
+local function toggleTeleportMode()
+    isTeleporting = not isTeleporting
+    
+    if isTeleporting then
+        -- Start teleporting
+        print("Starting continuous teleport...")
+        print("Distance range: " .. MIN_DISTANCE .. " to " .. MAX_DISTANCE .. " studs")
+        print("Teleport delay: " .. TELEPORT_DELAY .. " seconds")
+        
+        -- Create a loop that teleports repeatedly
+        teleportLoop = RunService.Heartbeat:Connect(function()
+            teleportOnce()
+            wait(TELEPORT_DELAY)
+        end)
+        
+    else
+        -- Stop teleporting
+        print("Stopping teleport...")
+        
+        if teleportLoop then
+            teleportLoop:Disconnect()
+            teleportLoop = nil
+        end
+    end
+end
+
+-- Listen for key presses
+UserInputService.InputBegan:Connect(function(input, isGameProcessed)
+    -- Don't respond if game is processing the input
+    if isGameProcessed then 
+        return 
+    end
+    
+    -- Check if P was pressed
+    if input.KeyCode == TELEPORT_KEY then
+        toggleTeleportMode()
+    end
+end)
+
+-- Handle character respawns (if we die)
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    humanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
+end)
