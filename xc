@@ -18,7 +18,7 @@ local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 
 local Window = Library:CreateWindow({
-    Title = 'XC Script Hub',
+    Title = 'claude code ',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -935,5 +935,3 @@ ThemeManager:ApplyToTab(Tabs['UI Settings'])
 
 SaveManager:LoadAutoloadConfig()
 
-print('XC Script Hub loaded successfully!')
-print('Press END to toggle menu')
